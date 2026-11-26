@@ -1,0 +1,629 @@
+npm create vite@latest fiso-store -- --template react
+cd fiso-store
+npm install
+npm install framer-motion lucide-react
+npm install -D tailwindcss @tailwindcss/viteimport { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});import React, { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft, Search, ShoppingBag, Heart, MessageCircle,
+  UserRound, Plus, X, ChevronRight, ChevronLeft, Camera,
+  Send, Trash2, ImagePlus, Package, LogOut, Check,
+  CheckCheck, SlidersHorizontal, Home, Store, Menu
+} from "lucide-react";
+
+const KEY = "fiso-store-v1";
+const money = n => "৳" + Number(n || 0).toLocaleString("en-BD");
+const uid = () => crypto.randomUUID?.() || Date.now() + Math.random();
+
+const initialProducts = [
+  {
+    id: "p1", title: "Premium Wireless Headphones",
+    price: 2490, original: 3490, category: "Electronics",
+    stock: 24, sold: 128, rating: 4.8,
+    images: ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1000"],
+    specs: [{ key: "Connectivity", value: "Bluetooth 5.3" },
+      { key: "Battery", value: "30 hours" }],
+    description: "Immersive sound, comfortable fit, and all-day battery life."
+  },
+  {
+    id: "p2", title: "Minimal Everyday Backpack",
+    price: 1850, original: 2200, category: "Fashion",
+    stock: 16, sold: 76, rating: 4.7,
+    images: ["https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=1000"],
+    specs: [{ key: "Material", value: "Water-resistant fabric" },
+      { key: "Capacity", value: "20 litres" }],
+    description: "A versatile backpack for school, work, and everyday adventures."
+  },
+  {
+    id: "p3", title: "Modern Ceramic Coffee Set",
+    price: 1250, original: 1500, category: "Home",
+    stock: 30, sold: 43, rating: 4.9,
+    images: ["https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=1000"],
+    specs: [{ key: "Material", value: "Ceramic" },
+      { key: "Pieces", value: "4" }],
+    description: "A simple, elegant coffee set for slow mornings."
+  },
+  {
+    id: "p4", title: "Classic Everyday Sneakers",
+    price: 2950, original: 3800, category: "Fashion",
+    stock: 12, sold: 91, rating: 4.6,
+    images: ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"],
+    specs: [{ key: "Upper", value: "Synthetic leather" },
+      { key: "Sole", value: "Rubber" }],
+    description: "Comfortable everyday sneakers with a clean, timeless design."
+  }
+];
+
+const readStore = () => {
+  try {
+    return JSON.parse(localStorage.getItem(KEY)) || {};
+  } catch {
+    return {};
+  }
+};
+
+const defaults = {
+  products: initialProducts,
+  cart: [],
+  wishlist: [],
+  orders: [],
+  chats: [],
+  address: "Dhaka, Bangladesh"
+};
+
+function useStore() {
+  const [data, setData] = useState(() => ({
+    ...defaults, ...readStore()
+  }));
+
+  useEffect(() => {
+    localStorage.setItem(KEY, JSON.stringify(data));
+  }, [data]);
+
+  return [data, setData];
+}
+
+const Glass = ({ children, className = "", ...props }) => (
+  <div className={`glass ${className}`} {...props}>{children}</div>
+);
+
+function Button({ children, onClick, className = "", disabled }) {
+  return (
+    <button disabled={disabled} onClick={onClick}
+      className={`btn ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function ProductCard({ product, onOpen, liked, onLike, add }) {
+  const discount = product.original > product.price
+    ? Math.round((1 - product.price / product.original) * 100)
+    : 0;
+
+  return (
+    <motion.article layout whileHover={{ y: -5 }}
+      className="product-card">
+      <div className="product-image" onClick={onOpen}>
+        <img src={product.images?.[0]} alt={product.title}
+          loading="lazy" />
+        {discount > 0 && <span className="sale-badge">-{discount}%</span>}
+        <button className="like-button" onClick={e => {
+          e.stopPropagation(); onLike();
+        }}>
+          <Heart size={18} fill={liked ? "#fb7185" : "none"}
+            color={liked ? "#fb7185" : "currentColor"} />
+        </button>
+        <button className="quick-add" onClick={e => {
+          e.stopPropagation(); add();
+        }}><Plus size={18} /> Add</button>
+      </div>
+      <div className="product-info" onClick={onOpen}>
+        <span className="eyebrow">{product.category}</span>
+        <h3>{product.title}</h3>
+        <div className="price-row">
+          <strong>{money(product.price)}</strong>
+          {product.original > product.price &&
+            <del>{money(product.original)}</del>}
+        </div>
+        <div className="product-meta">
+          <span>★ {product.rating || "New"}</span>
+          <span>{product.sold || 0} sold</span>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+function App() {
+  const [store, setStore] = useStore();
+  const [role, setRole] = useState("");
+  const [screen, setScreen] = useState("home");
+  const [category, setCategory] = useState("All");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [modal, setModal] = useState("");
+  const [zoom, setZoom] = useState(false);
+  const [imageIndex, setImageIndex] = useState(0);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [chatProduct, setChatProduct] = useState(null);
+  const [chatText, setChatText] = useState("");
+  const [activeChat, setActiveChat] = useState("seller");
+  const [typing, setTyping] = useState(false);
+  const [form, setForm] = useState({
+    title: "", price: "", original: "", category: "Electronics",
+    stock: "", description: "", specs: [{ key: "", value: "" }],
+    images: []
+  });
+  const fileRef = useRef(null);
+  const touchStart = useRef(null);
+
+  const categories = ["All", "Electronics", "Fashion", "Home", "Beauty", "Sports"];
+
+  const products = store.products.filter(p =>
+    (category === "All" || p.category === category) &&
+    p.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const cartCount = store.cart.reduce((sum, item) => sum + item.qty, 0);
+  const cartTotal = store.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+  const patch = (key, value) => setStore(s => ({ ...s, [key]: value }));
+
+  const addToCart = product => {
+    setStore(s => {
+      const found = s.cart.find(item => item.id === product.id);
+      return {
+        ...s,
+        cart: found
+          ? s.cart.map(item => item.id === product.id
+            ? { ...item, qty: item.qty + 1 } : item)
+          : [...s.cart, { ...product, qty: 1 }]
+      };
+    });
+  };
+
+  const toggleLike = id => patch("wishlist",
+    store.wishlist.includes(id)
+      ? store.wishlist.filter(x => x !== id)
+      : [...store.wishlist, id]
+  );
+
+  const openProduct = product => {
+    setSelected(product);
+    setImageIndex(0);
+    setScreen("detail");
+  };
+
+  const startChat = product => {
+    setChatProduct(product || null);
+    setActiveChat("seller");
+    setScreen("chat");
+  };
+
+  const sendMessage = (text = chatText) => {
+    if (!text.trim()) return;
+    const msg = { id: uid(), from: "user", text, time: Date.now() };
+    patch("chats", [...store.chats, msg]);
+    setChatText("");
+    setTyping(true);
+
+    setTimeout(() => {
+      setTyping(false);
+      const reply = {
+        id: uid(), from: "seller",
+        text: "Thanks for contacting Fiso Store! Yes, we're here to help. 😊",
+        time: Date.now()
+      };
+      setStore(s => ({ ...s, chats: [...s.chats, reply] }));
+    }, 1200);
+  };
+
+  const uploadFiles = files => {
+    const remaining = 12 - form.images.length;
+    [...files].slice(0, remaining).forEach(file => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = () => setForm(f => ({
+        ...f, images: [...f.images, reader.result]
+      }));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const publish = e => {
+    e.preventDefault();
+    if (!form.title || !form.price) return;
+    const product = {
+      ...form, id: uid(), price: Number(form.price),
+      original: Number(form.original || form.price),
+      stock: Number(form.stock || 0), sold: 0, rating: 0,
+      images: form.images.length ? form.images : [
+        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1000"
+      ],
+      specs: form.specs.filter(s => s.key && s.value)
+    };
+    patch("products", [product, ...store.products]);
+    setForm({
+      title: "", price: "", original: "", category: "Electronics",
+      stock: "", description: "", specs: [{ key: "", value: "" }],
+      images: []
+    });
+    setModal("");
+    setScreen("home");
+  };
+
+  const checkout = () => {
+    if (!store.cart.length) return;
+    const order = {
+      id: "FS-" + Date.now().toString().slice(-6),
+      items: store.cart, total: cartTotal,
+      status: "Order placed", date: new Date().toLocaleDateString()
+    };
+    patch("orders", [order, ...store.orders]);
+    patch("cart", []);
+    setScreen("profile");
+  };
+
+  const switchRole = next => {
+    setRole(next);
+    setModal("");
+    setScreen("home");
+  };
+
+  if (!role) return (
+    <main className="login-screen">
+      <div className="mesh mesh-one" />
+      <div className="mesh mesh-two" />
+      <motion.div initial={{ opacity: 0, scale: .94, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="login-card glass">
+        <div className="brand-mark">F</div>
+        <p className="eyebrow">A BETTER WAY TO SHOP</p>
+        <h1>Welcome to<br /><span>Fiso Store.</span></h1>
+        <p className="muted">Discover something extraordinary.</p>
+        <div className="role-switch">
+          <button onClick={() => switchRole("customer")}>Customer</button>
+          <button onClick={() => switchRole("admin")}>Admin / Seller</button>
+        </div>
+        <p className="login-note">Choose a demo role to enter the store.</p>
+      </motion.div>
+    </main>
+  );
+
+  const isAdmin = role === "admin";
+
+  return (
+    <div className="app-shell">
+      <header className="topbar glass">
+        <button className="brand" onClick={() => setScreen("home")}>
+          <span className="brand-mark small">F</span>
+          <span>fiso<span className="brand-light"> store</span></span>
+        </button>
+        <div className="search-box">
+          <Search size={18} />
+          <input placeholder="Search products..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <nav className="desktop-links">
+          <button onClick={() => setScreen("home")}>Discover</button>
+          <button onClick={() => setScreen("chat")}>Messages</button>
+          <button onClick={() => setScreen("profile")}>Profile</button>
+        </nav>
+        <button className="icon-button" onClick={() => setScreen("cart")}>
+          <ShoppingBag size={20} />
+          {cartCount > 0 && <span className="count">{cartCount}</span>}
+        </button>
+        <button className="icon-button mobile-only"
+          onClick={() => setMobileMenu(!mobileMenu)}><Menu /></button>
+      </header>
+
+      {mobileMenu && <Glass className="mobile-menu">
+        <button onClick={() => setScreen("home")}>Discover</button>
+        <button onClick={() => setScreen("chat")}>Messages</button>
+        <button onClick={() => setScreen("profile")}>Profile</button>
+      </Glass>}
+
+      <main className="main-layout">
+        {screen === "home" && <>
+          <aside className="sidebar glass">
+            <p className="eyebrow">EXPLORE</p>
+            <h2>Find your<br />next favorite.</h2>
+            {categories.map(c => <button key={c}
+              className={`category-link ${category === c ? "active" : ""}`}
+              onClick={() => setCategory(c)}>{c}<ChevronRight size={16} /></button>)}
+            <div className="sidebar-note">
+              <span>✦</span><b>Curated for you</b>
+              <p>Discover products made for everyday living.</p>
+            </div>
+          </aside>
+          <section className="storefront">
+            <div className="hero glass">
+              <div>
+                <span className="eyebrow">THE EVERYDAY EDIT</span>
+                <h1>Good finds.<br /><em>Better living.</em></h1>
+                <p>Thoughtful products, delightful prices.</p>
+                <Button onClick={() => setCategory("All")}>Explore collection <ChevronRight size={16} /></Button>
+              </div>
+              <div className="hero-orb">F</div>
+            </div>
+            <div className="category-pills">
+              {categories.map(c => <button key={c}
+                className={category === c ? "selected" : ""}
+                onClick={() => setCategory(c)}>{c}</button>)}
+            </div>
+            <div className="section-heading">
+              <div><span className="eyebrow">THE COLLECTION</span>
+                <h2>{category === "All" ? "Discover products" : category}</h2></div>
+              <span>{products.length} items</span>
+            </div>
+            <div className="product-grid">
+              {products.map(p => <ProductCard key={p.id} product={p}
+                onOpen={() => openProduct(p)}
+                liked={store.wishlist.includes(p.id)}
+                onLike={() => toggleLike(p.id)}
+                add={() => addToCart(p)} />)}
+            </div>
+          </section>
+        </>}
+
+        {screen === "detail" && selected && (
+          <section className="detail-page">
+            <button className="back-link" onClick={() => setScreen("home")}>
+              <ArrowLeft size={18} /> Back to store
+            </button>
+            <div className="detail-grid">
+              <div className="gallery">
+                <div className="gallery-main glass"
+                  onTouchStart={e => touchStart.current = e.touches[0].clientX}
+                  onTouchEnd={e => {
+                    const diff = touchStart.current - e.changedTouches[0].clientX;
+                    if (Math.abs(diff) > 40) setImageIndex(i =>
+                      Math.max(0, Math.min(selected.images.length - 1, i + (diff > 0 ? 1 : -1)))
+                    );
+                  }}>
+                  <img src={selected.images[imageIndex]} alt={selected.title}
+                    onClick={() => setZoom(true)} />
+                  {selected.images.length > 1 && <>
+                    <button className="gallery-arrow left"
+                      onClick={() => setImageIndex(i => Math.max(0, i - 1))}><ChevronLeft /></button>
+                    <button className="gallery-arrow right"
+                      onClick={() => setImageIndex(i => Math.min(selected.images.length - 1, i + 1))}><ChevronRight /></button>
+                  </>}
+                  <span className="image-count">{imageIndex + 1}/{selected.images.length}</span>
+                </div>
+                <div className="thumb-strip">
+                  {selected.images.map((img, i) => <button key={i}
+                    className={i === imageIndex ? "thumb active" : "thumb"}
+                    onClick={() => setImageIndex(i)}><img src={img} /></button>)}
+                </div>
+              </div>
+              <div className="detail-info glass">
+                <span className="eyebrow">{selected.category}</span>
+                <h1>{selected.title}</h1>
+                <p className="rating-line">★ {selected.rating || "New"} · {selected.sold || 0} sold</p>
+                <div className="detail-price">{money(selected.price)}
+                  {selected.original > selected.price && <del>{money(selected.original)}</del>}
+                </div>
+                <p className="stock-line">{selected.stock > 0 ? "✓ In stock" : "Check availability"}</p>
+                <p className="description">{selected.description}</p>
+                <h3>Specifications</h3>
+                <div className="spec-table">
+                  {(selected.specs || []).map((s, i) => <div key={i}>
+                    <span>{s.key}</span><b>{s.value}</b></div>)}
+                </div>
+                <div className="detail-actions">
+                  <Button onClick={() => startChat(selected)}><MessageCircle size={17} /> Chat Now</Button>
+                  <Button className="secondary" onClick={() => addToCart(selected)}>
+                    <ShoppingBag size={17} /> Add to Cart
+                  </Button>
+                  <Button className="primary" onClick={() => {
+                    addToCart(selected); setScreen("cart");
+                  }}>Buy Now</Button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {screen === "cart" && <section className="content-panel glass">
+          <button className="back-link" onClick={() => setScreen("home")}><ArrowLeft /> Continue shopping</button>
+          <h1>Your bag <span className="muted">({cartCount})</span></h1>
+          {store.cart.length === 0 ? <p>Your cart is waiting for something good.</p> :
+            <div className="cart-layout">
+              <div>{store.cart.map(item => <div className="cart-item" key={item.id}>
+                <img src={item.images[0]} />
+                <div className="cart-item-info"><b>{item.title}</b><strong>{money(item.price)}</strong>
+                  <div className="qty">
+                    <button onClick={() => patch("cart", store.cart.map(x =>
+                      x.id === item.id ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}>−</button>
+                    {item.qty}
+                    <button onClick={() => addToCart(item)}>+</button>
+                    <button className="remove" onClick={() => patch("cart",
+                      store.cart.filter(x => x.id !== item.id))}><Trash2 size={15} /></button>
+                  </div>
+                </div>
+              </div>)}</div>
+              <Glass className="summary">
+                <h3>Order summary</h3>
+                <div className="summary-line"><span>Subtotal</span><b>{money(cartTotal)}</b></div>
+                <div className="summary-line"><span>Delivery</span><span>Calculated later</span></div>
+                <div className="summary-line total"><span>Total</span><b>{money(cartTotal)}</b></div>
+                <Button className="primary full" onClick={checkout}>Place demo order</Button>
+                <p className="muted small">No payment will be collected.</p>
+              </Glass>
+            </div>}
+        </section>}
+
+        {screen === "profile" && <section className="content-panel glass">
+          <span className="eyebrow">YOUR ACCOUNT</span>
+          <h1>Your profile</h1>
+          <div className="profile-top">
+            <div className="avatar">{role === "admin" ? "S" : "C"}</div>
+            <div><h2>{role === "admin" ? "Fiso Seller" : "Fiso Customer"}</h2>
+              <span className="role-badge">{role === "admin" ? "Admin / Seller" : "Customer"}</span></div>
+          </div>
+          <div className="profile-grid">
+            <Glass><h3>Shipping address</h3>
+              <p>{store.address}</p>
+              <Button className="secondary" onClick={() => {
+                const address = prompt("Shipping address", store.address);
+                if (address) patch("address", address);
+              }}>Edit address</Button></Glass>
+            <Glass><h3>Account mode</h3>
+              <p>Switch between shopping and selling.</p>
+              <Button className="secondary" onClick={() => switchRole(isAdmin ? "customer" : "admin")}>
+                Switch to {isAdmin ? "Customer" : "Admin"} mode</Button>
+            </Glass>
+          </div>
+          <h2 className="subheading">Order history</h2>
+          {store.orders.length === 0 ? <p className="muted">Your orders will appear here.</p> :
+            store.orders.map(o => <Glass key={o.id} className="order-card">
+              <div><b>Order {o.id}</b><span className="status">{o.status}</span></div>
+              <p>{o.date} · {o.items.length} items · {money(o.total)}</p>
+              <div className="timeline"><span>✓ Placed</span><span>○ Processing</span><span>○ Delivered</span></div>
+            </Glass>)}
+          <h2 className="subheading">Wishlist</h2>
+          <div className="product-grid">
+            {store.products.filter(p => store.wishlist.includes(p.id)).map(p =>
+              <ProductCard key={p.id} product={p} onOpen={() => openProduct(p)}
+                liked onLike={() => toggleLike(p.id)} add={() => addToCart(p)} />)}
+          </div>
+          <Button className="secondary logout" onClick={() => {
+            setRole(""); setScreen("home");
+          }}><LogOut size={16} /> Log out</Button>
+        </section>}
+
+        {screen === "chat" && <section className="chat-workspace glass">
+          <aside className="conversation-list">
+            <h2>Messages</h2>
+            <button className="conversation active" onClick={() => setActiveChat("seller")}>
+              <div className="avatar seller-avatar">F</div>
+              <div><b>Fiso Store Admin</b><p>How can we help?</p></div>
+              <span className="online-dot" />
+            </button>
+          </aside>
+          <div className="chat-main">
+            <div className="chat-heading">
+              <div className="avatar seller-avatar">F</div>
+              <div><b>Fiso Store Admin</b><p><span className="online-dot" /> Online</p></div>
+            </div>
+            <div className="chat-messages">
+              {chatProduct && <div className="chat-product glass">
+                <img src={chatProduct.images[0]} />
+                <div><span className="eyebrow">PRODUCT ENQUIRY</span>
+                  <b>{chatProduct.title}</b><strong>{money(chatProduct.price)}</strong></div>
+              </div>}
+              <div className="chat-bubble seller-bubble">Hello! Welcome to Fiso Store. How can we help you today?</div>
+              {store.chats.map(msg => <div key={msg.id}
+                className={`chat-bubble ${msg.from === "user" ? "user-bubble" : "seller-bubble"}`}>
+                {msg.text}<span className="message-time">
+                  {new Date(msg.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {msg.from === "user" && <CheckCheck size={13} />}
+                </span>
+              </div>)}
+              {typing && <div className="typing">Admin is typing...</div>}
+            </div>
+            <div className="quick-replies">
+              {["Is this available?", "Best price?", "Delivery time in Dhaka?"].map(t =>
+                <button key={t} onClick={() => sendMessage(t)}>{t}</button>)}
+            </div>
+            <form className="chat-input" onSubmit={e => { e.preventDefault(); sendMessage(); }}>
+              <input value={chatText} onChange={e => setChatText(e.target.value)}
+                placeholder="Write a message..." />
+              <Button><Send size={17} /></Button>
+            </form>
+          </div>
+        </section>}
+      </main>
+
+      <nav className="bottom-nav glass">
+        <button onClick={() => setScreen("home")}><Home /><span>Home</span></button>
+        <button onClick={() => setScreen("cart")}><ShoppingBag /><span>Cart</span>
+          {cartCount > 0 && <i>{cartCount}</i>}</button>
+        {isAdmin && <button className="nav-plus" onClick={() => setModal("product")}><Plus /></button>}
+        <button onClick={() => setScreen("chat")}><MessageCircle /><span>Chat</span></button>
+        <button onClick={() => setScreen("profile")}><UserRound /><span>Profile</span></button>
+      </nav>
+
+      <AnimatePresence>
+        {modal === "product" && isAdmin && <motion.div className="modal-backdrop"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setModal("")}>
+          <motion.form className="product-studio glass"
+            initial={{ y: 35, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 35, opacity: 0 }}
+            onClick={e => e.stopPropagation()} onSubmit={publish}>
+            <div className="studio-heading"><div><span className="eyebrow">SELLER STUDIO</span>
+              <h2>Add a product</h2></div><button type="button" onClick={() => setModal("")}><X /></button></div>
+            <label>Product photos <span>{form.images.length}/12</span></label>
+            <div className="upload-grid">
+              {form.images.map((img, i) => <div className="upload-thumb" key={i}>
+                <img src={img} /><button type="button" onClick={() =>
+                  setForm(f => ({ ...f, images: f.images.filter((_, n) => n !== i) }))}><X size={14} /></button>
+                <span>{i + 1}</span>
+              </div>)}
+              {form.images.length < 12 && <button type="button" className="upload-button"
+                onClick={() => fileRef.current?.click()}><ImagePlus /><span>Add photos</span></button>}
+            </div>
+            <input ref={fileRef} hidden type="file" accept="image/*" multiple
+              onChange={e => uploadFiles(e.target.files)} />
+            <p className="muted small">Select up to 12 images. The first image is the cover.</p>
+            <label>Product title</label>
+            <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+            <div className="form-row">
+              <div><label>Price (৳)</label><input required type="number" min="0"
+                value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} /></div>
+              <div><label>Original price (৳)</label><input type="number" min="0"
+                value={form.original} onChange={e => setForm(f => ({ ...f, original: e.target.value }))} /></div>
+            </div>
+            <div className="form-row">
+              <div><label>Category</label><select value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {categories.filter(c => c !== "All").map(c => <option key={c}>{c}</option>)}
+              </select></div>
+              <div><label>Stock quantity</label><input type="number" min="0"
+                value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} /></div>
+            </div>
+            <label>Description</label>
+            <textarea rows="3" value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <label>Specifications</label>
+            {form.specs.map((s, i) => <div className="form-row spec-input" key={i}>
+              <input placeholder="Specification" value={s.key}
+                onChange={e => setForm(f => ({ ...f, specs: f.specs.map((x, n) =>
+                  n === i ? { ...x, key: e.target.value } : x) }))} />
+              <input placeholder="Value" value={s.value}
+                onChange={e => setForm(f => ({ ...f, specs: f.specs.map((x, n) =>
+                  n === i ? { ...x, value: e.target.value } : x) }))} />
+              <button type="button" onClick={() => setForm(f => ({
+                ...f, specs: f.specs.filter((_, n) => n !== i)
+              }))}><Trash2 size={15} /></button>
+            </div>)}
+            <Button type="button" className="secondary"
+              onClick={() => setForm(f => ({ ...f, specs: [...f.specs, { key: "", value: "" }] }))}>
+              <Plus size={16} /> Add specification
+            </Button>
+            <Button className="primary full" type="submit">Publish product</Button>
+          </motion.form>
+        </motion.div>}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {zoom && selected && <motion.div className="image-zoom"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setZoom(false)}>
+          <button><X /></button><img src={selected.images[imageIndex]} />
+        </motion.div>}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export default App;
